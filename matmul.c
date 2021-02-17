@@ -4,7 +4,7 @@
 
 typedef uint16_t u16;
 
-#define N 8
+#define N 4
 #define MAXRAND 8
 
 #if (N % 8) == 0
@@ -22,7 +22,7 @@ typedef uint16x8x4_t vecval;
 
 #elif (N % 4) == 0
 
-#define size 4
+#define BLOCKSIZE 4
 typedef uint16x4_t vec;
 typedef uint16x4x4_t vecval;
 #define vload(c, ptr) c = vld1_u16(ptr);
@@ -112,13 +112,14 @@ void neonMatMul_tranpose(u16 AT[], u16 B[], u16 C[])
 #if (N % 8) == 0
 void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 {
-	vecval va1, va2, vb1, vb2, vc;
+	// Total registers:  24
+	vecval va1, va2, vb1, vb2, vc1, vc2;
 
 	vloadx4(vb1, &B[0]);
-	vloadx4(vb2, &B[32]);
+	vloadx4(vb2, &B[4*BLOCKSIZE]);
 
 	vloadx4(va1, &A[0]);
-	vloadx4(va2, &A[32]);
+	vloadx4(va2, &A[4*BLOCKSIZE]);
 
 	// vload(vb1.val[0], &B[0 * 8]);
 	// vload(vb1.val[1], &B[1 * 8]);
@@ -140,7 +141,8 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 	// vload(va2.val[2], &A[6 * 8]);
 	// vload(va2.val[3], &A[7 * 8]);
 
-	vloadx4(vc, &C[0]);
+	vloadx4(vc1, &C[0]);
+	vloadx4(vc2, &C[4*BLOCKSIZE]);
 
 	for (int i = 0; i < 4; i++)
 	{
@@ -166,22 +168,19 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 		// vmla(vc, va2.val[2], vb2.val[2]);
 		// vmla(vc, va2.val[3], vb2.val[3]);
 
-		vmlalane(vc.val[i], va1.val[0], vb1.val[i], 0);
-		vmlalane(vc.val[i], va1.val[1], vb1.val[i], 1);
-		vmlalane(vc.val[i], va1.val[2], vb1.val[i], 2);
-		vmlalane(vc.val[i], va1.val[3], vb1.val[i], 3);
+		vmlalane(vc1.val[i], va1.val[0], vb1.val[i], 0);
+		vmlalane(vc1.val[i], va1.val[1], vb1.val[i], 1);
+		vmlalane(vc1.val[i], va1.val[2], vb1.val[i], 2);
+		vmlalane(vc1.val[i], va1.val[3], vb1.val[i], 3);
 
-		vmlalane(vc.val[i], va2.val[0], vb1.val[i], 4);
-		vmlalane(vc.val[i], va2.val[1], vb1.val[i], 5);
-		vmlalane(vc.val[i], va2.val[2], vb1.val[i], 6);
-		vmlalane(vc.val[i], va2.val[3], vb1.val[i], 7);
+		vmlalane(vc1.val[i], va2.val[0], vb1.val[i], 4);
+		vmlalane(vc1.val[i], va2.val[1], vb1.val[i], 5);
+		vmlalane(vc1.val[i], va2.val[2], vb1.val[i], 6);
+		vmlalane(vc1.val[i], va2.val[3], vb1.val[i], 7);
 
 		// vstore(&C[i * 8], vc);
 	}
-	vstorex4(&C[0], vc);
-
-	vloadx4(vc, &C[32]);
-
+	
 	for (int i = 4; i < 8; i++)
 	{
 		// vload(vc, &C[i * 8]); 
@@ -206,18 +205,19 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 		// vmla(vc, va2.val[2], vb2.val[2]);
 		// vmla(vc, va2.val[3], vb2.val[3]);
 
-		vmlalane(vc.val[i-4], va1.val[0], vb2.val[i-4], 0);
-		vmlalane(vc.val[i-4], va1.val[1], vb2.val[i-4], 1);
-		vmlalane(vc.val[i-4], va1.val[2], vb2.val[i-4], 2);
-		vmlalane(vc.val[i-4], va1.val[3], vb2.val[i-4], 3);
+		vmlalane(vc2.val[i-4], va1.val[0], vb2.val[i-4], 0);
+		vmlalane(vc2.val[i-4], va1.val[1], vb2.val[i-4], 1);
+		vmlalane(vc2.val[i-4], va1.val[2], vb2.val[i-4], 2);
+		vmlalane(vc2.val[i-4], va1.val[3], vb2.val[i-4], 3);
 
-		vmlalane(vc.val[i-4], va2.val[0], vb2.val[i-4], 4);
-		vmlalane(vc.val[i-4], va2.val[1], vb2.val[i-4], 5);
-		vmlalane(vc.val[i-4], va2.val[2], vb2.val[i-4], 6);
-		vmlalane(vc.val[i-4], va2.val[3], vb2.val[i-4], 7);
+		vmlalane(vc2.val[i-4], va2.val[0], vb2.val[i-4], 4);
+		vmlalane(vc2.val[i-4], va2.val[1], vb2.val[i-4], 5);
+		vmlalane(vc2.val[i-4], va2.val[2], vb2.val[i-4], 6);
+		vmlalane(vc2.val[i-4], va2.val[3], vb2.val[i-4], 7);
 
 	}
-	vstorex4(&C[32], vc);
+	vstorex4(&C[0], vc1);
+	vstorex4(&C[4*BLOCKSIZE], vc2);
 
 
 }
@@ -226,8 +226,7 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 
 void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 {
-	vecval va, vb;
-	vec vc;
+	vecval va, vb, vc;
 
 	vload(vb.val[0], &B[0 * N]);
 	vload(vb.val[1], &B[1 * N]);
@@ -238,10 +237,16 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 	vload(va.val[1], &A[1 * N]);
 	vload(va.val[2], &A[2 * N]);
 	vload(va.val[3], &A[3 * N]);
+
+	vload(vc.val[0], &C[0 * N]);
+	vload(vc.val[1], &C[1 * N]);
+	vload(vc.val[2], &C[2 * N]);
+	vload(vc.val[3], &C[3 * N]);
+
 	for (int i = 0; i < N; i++)
 	{
 		// vload(vc, &C[i * N]); 
-		vdup(vc, 0);
+		// vdup(vc, 0);
 
 		// vdup(va.val[0], AT[i * 4 + 0]);
 		// vdup(va.val[1], AT[i * 4 + 1]);
@@ -253,13 +258,16 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 		// vmla(vc, va.val[2], vb.val[2]);
 		// vmla(vc, va.val[3], vb.val[3]);
 
-		vmlalane(vc, va.val[0], vb.val[i], 0);
-		vmlalane(vc, va.val[1], vb.val[i], 1);
-		vmlalane(vc, va.val[2], vb.val[i], 2);
-		vmlalane(vc, va.val[3], vb.val[i], 3);
+		vmlalane(vc.val[i], va.val[0], vb.val[i], 0);
+		vmlalane(vc.val[i], va.val[1], vb.val[i], 1);
+		vmlalane(vc.val[i], va.val[2], vb.val[i], 2);
+		vmlalane(vc.val[i], va.val[3], vb.val[i], 3);
 
-		vstore(&C[i * N], vc);
 	}
+	vstore(&C[0 * N], vc.val[0]);
+	vstore(&C[1 * N], vc.val[1]);
+	vstore(&C[2 * N], vc.val[2]);
+	vstore(&C[3 * N], vc.val[3]);
 }
 #else
 void neonMatMul_base(u16 AT[], u16 B[], u16 C[])
