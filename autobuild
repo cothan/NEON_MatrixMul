@@ -2,3 +2,4 @@
 
 gcc -o matmul matmul.c libpapi.a -g3 -O3 -fno-tree-vectorize -Wall -Wextra -Wpedantic
 ./matmul 
+cat papi_hl_output/rank*

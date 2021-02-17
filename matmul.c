@@ -1,13 +1,14 @@
 #include <arm_neon.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <papi.h>
 
 typedef uint16_t u16;
 
 // Correct with N = 4, 12, 20
 // gcc matmul.c -o matmul -O3  -g3 -mcpu=cortex-a9 -mfloat-abi=hard -mfpu=neon
 
-#define N 252
+#define N 260
 #define MAXRAND 8
 #ifndef DEBUG
 #define DEBUG 0
@@ -218,7 +219,7 @@ int checkCorrect(u16 A[], u16 B[])
     return 0;
 }
 
-#define TESTS 1
+#define TESTS 1000
 
 int main()
 {
@@ -241,15 +242,19 @@ int main()
     print_array(B);
 #endif
 
+    PAPI_hl_region_begin("classicMatMult");
     for (int i = 0; i < TESTS; i++)
     {
         classicMatMult(A, B, C);
     }
+    PAPI_hl_region_end("classicMatMult");
 
+    PAPI_hl_region_begin("neoMatMul");
     for (int i = 0; i < TESTS; i++)
     {
         neoMatMul(A, B, D);
     }
+    PAPI_hl_region_end("neoMatMul");
 
 #if DEBUG
     printf("C======\n");
