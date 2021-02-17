@@ -1,8 +1,11 @@
 #include <arm_neon.h>
 #include <stdio.h>
-#include <papi.h>
 
 typedef uint16_t u16;
+
+// Correct with N = 4, 12, 20
+// gcc matmul.c -o matmul -O3  -g3 -mcpu=cortex-a9 -mfloat-abi=hard -mfpu=neon
+
 
 #define N 32
 #define MAXRAND 8
@@ -73,65 +76,6 @@ void classicMatMult(u16 A[], u16 B[], u16 C[])
 				C[i * N + j] += A[i * N + k] * B[k * N + j];
 				// printf("%d * %d\n", i * N + k , k * N + j);
 			}
-}
-
-void inplace_tranpose(u16 *dst, u16 *src)
-{
-	int S = 4;
-	for (int i = 0; i < N; i += S)
-	{
-		for (int j = 0; j < N; j += S)
-		{
-			// transpose smaller block size SxS
-			for (int m = i; m < i + S; ++m)
-			{
-				for (int n = j; n < j + S; ++n)
-				{
-					dst[m + n * N] = src[n + m * N];
-				}
-			}
-		}
-	}
-}
-
-void neonMatMul_ref(u16 AT[], u16 B[], u16 C[])
-{
-	vec va, vb, vc;
-	int i = 0, j = 0, k = 0;
-	int index_AT, index_B;
-	for (i = 0; i < N; i++)
-	{
-		for (j = 0; j < N; j++)
-		{
-			for (k = 0; k < N; k++)
-			{
-				index_AT = j * N + k;
-				index_B = i * N + k;
-				C[i * N + j] += B[index_B] * AT[index_AT];
-				printf("%d: %d * %d\n", i * N + j, index_AT, index_B);
-			}
-		}
-	}
-}
-
-void neonMatMul_tranpose(u16 AT[], u16 B[], u16 C[])
-{
-	vec va, vb, vc;
-	int i = 0, j = 0, k = 0;
-	int index_AT, index_B;
-	for (i = 0; i < N; i++)
-	{
-		for (j = 0; j < N; j++)
-		{
-			for (k = 0; k < N; k += BLOCKSIZE)
-			{
-				index_AT = j * N + k;
-				index_B = i * N + k;
-				C[i * N + j] += B[index_B] * AT[index_AT];
-				printf("%d: %d * %d\n", i * N + j, index_AT, index_B);
-			}
-		}
-	}
 }
 
 #if (N % 8) == 0
@@ -302,8 +246,6 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 	vstore(&C[1 * N], vc.val[1]);
 	vstore(&C[2 * N], vc.val[2]);
 	vstore(&C[3 * N], vc.val[3]);
-
-	print_vector(vc);
 }
 #else
 #error "Matrix must be multiple of {4, 8}"
@@ -334,7 +276,7 @@ int checkCorrect(u16 A[], u16 B[])
 	return 0;
 }
 
-#define TESTS 1000
+#define TESTS 1
 
 int main()
 {
@@ -350,28 +292,20 @@ int main()
 		// D[i] = i;
 	}
 
-	// print_array(A);
-	// print_array(B);
-	// print_array(D);
 
-	PAPI_hl_region_begin("classic");
 	for (int i = 0; i < TESTS; i++)
 	{
 		classicMatMult(A, B, C);
 	}
-	PAPI_hl_region_end("classic");
 
-	// inplace_tranpose(M, A);
-	// print_array(M);
-	// print_array(C);
 
-	PAPI_hl_region_begin("neon");
 	for (int i = 0; i < TESTS; i++)
 	{
 		neoMatMul(A, B, D);
 	}
-	PAPI_hl_region_end("neon");
 
+	// print_array(A);
+	// print_array(B);
 	// print_array(C);
 	// print_array(D);
 
