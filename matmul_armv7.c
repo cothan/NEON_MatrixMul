@@ -7,10 +7,10 @@ typedef uint16_t u16;
 // Correct with N = 4, 12, 20
 // gcc matmul.c -o matmul -O3  -g3 -mcpu=cortex-a9 -mfloat-abi=hard -mfpu=neon
 
-#define N 252
+#define N 8
 #define MAXRAND 8
 #ifndef DEBUG
-#define DEBUG 0
+#define DEBUG 1
 #endif
 
 #if (N % 8) == 0
@@ -18,10 +18,12 @@ typedef uint16_t u16;
 #define BLOCKSIZE 8
 typedef uint16x8_t vec;
 typedef uint16x8x4_t vecval;
+typedef uint16x4x4_t vecval2;
 #define vload(c, ptr) c = vld1q_u16(ptr);
+#define vload_half(c, ptr) c = vld1_u16(ptr);
 #define vstore(ptr, c) vst1q_u16(ptr, c);
 #define vmla(c, a, b) c = vmlaq_u16(c, a, b);
-#define vmlalane(c, a, b, n) c = vmlaq_laneq_u16(c, a, b, n);
+#define vmlalane(c, a, b, n) c = vmlaq_lane_u16(c, a, b, n);
 #define vdup(c, n) c = vdupq_n_u16(n);
 
 #elif (N % 4) == 0
@@ -84,46 +86,58 @@ void classicMatMult(u16 A[], u16 B[], u16 C[])
 }
 
 #if (N % 8) == 0
+void print_vector_half(vecval2 a)
+{
+    for (int i = 0; i < 4; i+=2)
+    {
+        for (int j = 0; j < 4; j++)
+        {
+            printf("%4d, ", a.val[i][j]);
+        }
+        for (int j = 0; j < 4; j++)
+        {
+            printf("%4d, ", a.val[i+1][j]);
+        }
+        printf("\n");
+    }
+    printf("--\n");
+}
+
 void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 {
 	// Total registers:  24
-	vecval va1, va2, vc1, vc2;
-    vecval2 vb1, vb2, vb3, vb4;
+	vecval vb1, vb2, vc1, vc2;
+    vecval2 va1, va2, va3, va4;
 
-	vload_half(vb1.val[0], &B[0 * N]);
-	vload_half(vb1.val[1], &B[0 * N + 4]);
-	vload_half(vb1.val[2], &B[1 * N]);
-	vload_half(vb1.val[3], &B[1 * N + 4]);
+	vload_half(va1.val[0], &A[0 * N]);
+	vload_half(va1.val[1], &A[0 * N + 4]);
+	vload_half(va1.val[2], &A[1 * N]);
+	vload_half(va1.val[3], &A[1 * N + 4]);
 
-	vload_half(vb2.val[0], &B[2 * N]);
-	vload_half(vb2.val[1], &B[2 * N + 4]);
-	vload_half(vb2.val[2], &B[3 * N]);
-	vload_half(vb2.val[3], &B[3 * N + 4]);
+	vload_half(va2.val[0], &A[2 * N]);
+	vload_half(va2.val[1], &A[2 * N + 4]);
+	vload_half(va2.val[2], &A[3 * N]);
+	vload_half(va2.val[3], &A[3 * N + 4]);
 
-    vload_half(vb3.val[0], &B[4 * N]);
-	vload_half(vb3.val[1], &B[4 * N + 4]);
-	vload_half(vb3.val[2], &B[5 * N]);
-	vload_half(vb3.val[3], &B[5 * N + 4]);
+    vload_half(va3.val[0], &A[4 * N]);
+	vload_half(va3.val[1], &A[4 * N + 4]);
+	vload_half(va3.val[2], &A[5 * N]);
+	vload_half(va3.val[3], &A[5 * N + 4]);
 
-	vload_half(vb4.val[0], &B[6 * N]);
-	vload_half(vb4.val[1], &B[6 * N + 4]);
-	vload_half(vb4.val[2], &B[7 * N]);
-	vload_half(vb4.val[3], &B[7 * N + 4]);
+	vload_half(va4.val[0], &A[6 * N]);
+	vload_half(va4.val[1], &A[6 * N + 4]);
+	vload_half(va4.val[2], &A[7 * N]);
+	vload_half(va4.val[3], &A[7 * N + 4]);
+    
+	vload(vb1.val[0], &B[0 * N]);
+	vload(vb1.val[1], &B[1 * N]);
+	vload(vb1.val[2], &B[2 * N]);
+	vload(vb1.val[3], &B[3 * N]);
 
-    print_vector_half(vb1);
-    print_vector_half(vb2);
-    print_vector_half(vb3);
-    print_vector_half(vb4);
-
-	vload(va1.val[0], &A[0 * N]);
-	vload(va1.val[1], &A[1 * N]);
-	vload(va1.val[2], &A[2 * N]);
-	vload(va1.val[3], &A[3 * N]);
-
-	vload(va2.val[0], &A[4 * N]);
-	vload(va2.val[1], &A[5 * N]);
-	vload(va2.val[2], &A[6 * N]);
-	vload(va2.val[3], &A[7 * N]);
+	vload(vb2.val[0], &B[4 * N]);
+	vload(vb2.val[1], &B[5 * N]);
+	vload(vb2.val[2], &B[6 * N]);
+	vload(vb2.val[3], &B[7 * N]);
 
 	vload(vc1.val[0], &C[0 * N]);
 	vload(vc1.val[1], &C[1 * N]);
@@ -135,159 +149,105 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 	vload(vc2.val[2], &C[6 * N]);
 	vload(vc2.val[3], &C[7 * N]);
 
-    print_vector(va1);
-    print_vector(va2);
+#if DEBUG
+    print_vector_half(va1);
+    print_vector_half(va2);
+    print_vector_half(va3);
+    print_vector_half(va4);
+
+    print_vector(vb1);
+    print_vector(vb2);
     print_vector(vc1);
     print_vector(vc2);
+#endif
 
 
-    vmlalane(vc1.val[0], va1.val[0],  vb1.val[0], 0);
-    // print_vector(vc1); printf("%d\n", vb1.val[0][0]);
-    vmlalane(vc1.val[0], va1.val[1],  vb1.val[0], 1);
-    // print_vector(vc1); printf("%d\n", vb1.val[0][1]);
-    vmlalane(vc1.val[0], va1.val[2],  vb1.val[0], 2);
-    // print_vector(vc1); printf("%d\n", vb1.val[0][2]);
-    vmlalane(vc1.val[0], va1.val[3],  vb1.val[0], 3);
-    // print_vector(vc1); printf("%d\n", vb1.val[0][3]);
+    vmlalane(vc1.val[0], vb1.val[0],  va1.val[0], 0);
+    vmlalane(vc1.val[0], vb1.val[1],  va1.val[0], 1);
+    vmlalane(vc1.val[0], vb1.val[2],  va1.val[0], 2);
+    vmlalane(vc1.val[0], vb1.val[3],  va1.val[0], 3);
 
-    vmlalane(vc1.val[0], va2.val[0],  vb1.val[0+1], 0);
-    // print_vector(vc1); printf("%d\n", vb1.val[0+1][0]);
-    vmlalane(vc1.val[0], va2.val[1],  vb1.val[0+1], 1);
-    // print_vector(vc1); printf("%d\n", vb1.val[0+1][1]);
-    vmlalane(vc1.val[0], va2.val[2],  vb1.val[0+1], 2);
-    // print_vector(vc1); printf("%d\n", vb1.val[0+1][2]);
-    vmlalane(vc1.val[0], va2.val[3],  vb1.val[0+1], 3);
-    // print_vector(vc1); printf("%d\n", vb1.val[0+1][3]);
+    vmlalane(vc1.val[0], vb2.val[0],  va1.val[1], 0);
+    vmlalane(vc1.val[0], vb2.val[1],  va1.val[1], 1);
+    vmlalane(vc1.val[0], vb2.val[2],  va1.val[1], 2);
+    vmlalane(vc1.val[0], vb2.val[3],  va1.val[1], 3);
 
-    vmlalane(vc1.val[1], va1.val[0],  vb1.val[0+2], 0);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+2][0]);
-    vmlalane(vc1.val[1], va1.val[1],  vb1.val[0+2], 1);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+2][1]);
-    vmlalane(vc1.val[1], va1.val[2],  vb1.val[0+2], 2);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+2][2]);
-    vmlalane(vc1.val[1], va1.val[3],  vb1.val[0+2], 3);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+2][3]);
+    vmlalane(vc1.val[1], vb1.val[0],  va1.val[2], 0);
+    vmlalane(vc1.val[1], vb1.val[1],  va1.val[2], 1);
+    vmlalane(vc1.val[1], vb1.val[2],  va1.val[2], 2);
+    vmlalane(vc1.val[1], vb1.val[3],  va1.val[2], 3);
 
-    vmlalane(vc1.val[1], va2.val[0],  vb1.val[0+3], 0);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+3][0]);
-    vmlalane(vc1.val[1], va2.val[1],  vb1.val[0+3], 1);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+3][1]);
-    vmlalane(vc1.val[1], va2.val[2],  vb1.val[0+3], 2);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+3][2]);
-    vmlalane(vc1.val[1], va2.val[3],  vb1.val[0+3], 3);
-    // print_vector(vc1);   printf("%d\n", vb1.val[0+3][3]);
+    vmlalane(vc1.val[1], vb2.val[0],  va1.val[3], 0);
+    vmlalane(vc1.val[1], vb2.val[1],  va1.val[3], 1);
+    vmlalane(vc1.val[1], vb2.val[2],  va1.val[3], 2);
+    vmlalane(vc1.val[1], vb2.val[3],  va1.val[3], 3);
 
-    vmlalane(vc1.val[2], va1.val[0],  vb2.val[0], 0);
-    // print_vector(vc1); printf("%d\n", vb2.val[0][0]);
-    vmlalane(vc1.val[2], va1.val[1],  vb2.val[0], 1);
-    // print_vector(vc1); printf("%d\n", vb2.val[0][1]);
-    vmlalane(vc1.val[2], va1.val[2],  vb2.val[0], 2);
-    // print_vector(vc1); printf("%d\n", vb2.val[0][2]);
-    vmlalane(vc1.val[2], va1.val[3],  vb2.val[0], 3);
-    // print_vector(vc1); printf("%d\n", vb2.val[0][3]);
+    vmlalane(vc1.val[2], vb1.val[0],  va2.val[0], 0);
+    vmlalane(vc1.val[2], vb1.val[1],  va2.val[0], 1);
+    vmlalane(vc1.val[2], vb1.val[2],  va2.val[0], 2);
+    vmlalane(vc1.val[2], vb1.val[3],  va2.val[0], 3);
 
-    vmlalane(vc1.val[2], va2.val[0],  vb2.val[0+1], 0);
-    // print_vector(vc1); printf("%d\n", vb2.val[0+1][0]);
-    vmlalane(vc1.val[2], va2.val[1],  vb2.val[0+1], 1);
-    // print_vector(vc1); printf("%d\n", vb2.val[0+1][1]);
-    vmlalane(vc1.val[2], va2.val[2],  vb2.val[0+1], 2);
-    // print_vector(vc1); printf("%d\n", vb2.val[0+1][2]);
-    vmlalane(vc1.val[2], va2.val[3],  vb2.val[0+1], 3);
-    // print_vector(vc1); printf("%d\n", vb2.val[0+1][3]);
+    vmlalane(vc1.val[2], vb2.val[0],  va2.val[1], 0);
+    vmlalane(vc1.val[2], vb2.val[1],  va2.val[1], 1);
+    vmlalane(vc1.val[2], vb2.val[2],  va2.val[1], 2);
+    vmlalane(vc1.val[2], vb2.val[3],  va2.val[1], 3);
 
-    vmlalane(vc1.val[3], va1.val[0],  vb2.val[0+2], 0);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+2][0]);
-    vmlalane(vc1.val[3], va1.val[1],  vb2.val[0+2], 1);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+2][1]);
-    vmlalane(vc1.val[3], va1.val[2],  vb2.val[0+2], 2);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+2][2]);
-    vmlalane(vc1.val[3], va1.val[3],  vb2.val[0+2], 3);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+2][3]);
+    vmlalane(vc1.val[3], vb1.val[0],  va2.val[2], 0);
+    vmlalane(vc1.val[3], vb1.val[1],  va2.val[2], 1);
+    vmlalane(vc1.val[3], vb1.val[2],  va2.val[2], 2);
+    vmlalane(vc1.val[3], vb1.val[3],  va2.val[2], 3);
 
-    vmlalane(vc1.val[3], va2.val[0],  vb2.val[0+3], 0);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+3][0]);
-    vmlalane(vc1.val[3], va2.val[1],  vb2.val[0+3], 1);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+3][1]);
-    vmlalane(vc1.val[3], va2.val[2],  vb2.val[0+3], 2);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+3][2]);
-    vmlalane(vc1.val[3], va2.val[3],  vb2.val[0+3], 3);
-    // print_vector(vc1);   printf("%d\n", vb2.val[0+3][3]);
-	
+    vmlalane(vc1.val[3], vb2.val[0],  va2.val[3], 0);
+    vmlalane(vc1.val[3], vb2.val[1],  va2.val[3], 1);
+    vmlalane(vc1.val[3], vb2.val[2],  va2.val[3], 2);
+    vmlalane(vc1.val[3], vb2.val[3],  va2.val[3], 3);
 
-	vmlalane(vc2.val[0], va1.val[0],  vb3.val[0], 0);
-    // print_vector(vc2); printf("%d\n", vb3.val[0][0]);
-    vmlalane(vc2.val[0], va1.val[1],  vb3.val[0], 1);
-    // print_vector(vc2); printf("%d\n", vb3.val[0][1]);
-    vmlalane(vc2.val[0], va1.val[2],  vb3.val[0], 2);
-    // print_vector(vc2); printf("%d\n", vb3.val[0][2]);
-    vmlalane(vc2.val[0], va1.val[3],  vb3.val[0], 3);
-    // print_vector(vc2); printf("%d\n", vb3.val[0][3]);
+    vmlalane(vc2.val[0], vb1.val[0],  va3.val[0], 0);
+    vmlalane(vc2.val[0], vb1.val[1],  va3.val[0], 1);
+    vmlalane(vc2.val[0], vb1.val[2],  va3.val[0], 2);
+    vmlalane(vc2.val[0], vb1.val[3],  va3.val[0], 3);
 
-    vmlalane(vc2.val[0], va2.val[0],  vb3.val[0+1], 0);
-    // print_vector(vc2); printf("%d\n", vb3.val[0+1][0]);
-    vmlalane(vc2.val[0], va2.val[1],  vb3.val[0+1], 1);
-    // print_vector(vc2); printf("%d\n", vb3.val[0+1][1]);
-    vmlalane(vc2.val[0], va2.val[2],  vb3.val[0+1], 2);
-    // print_vector(vc2); printf("%d\n", vb3.val[0+1][2]);
-    vmlalane(vc2.val[0], va2.val[3],  vb3.val[0+1], 3);
-    // print_vector(vc2); printf("%d\n", vb3.val[0+1][3]);
+    vmlalane(vc2.val[0], vb2.val[0],  va3.val[1], 0);
+    vmlalane(vc2.val[0], vb2.val[1],  va3.val[1], 1);
+    vmlalane(vc2.val[0], vb2.val[2],  va3.val[1], 2);
+    vmlalane(vc2.val[0], vb2.val[3],  va3.val[1], 3);
 
-    vmlalane(vc2.val[1], va1.val[0],  vb3.val[0+2], 0);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+2][0]);
-    vmlalane(vc2.val[1], va1.val[1],  vb3.val[0+2], 1);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+2][1]);
-    vmlalane(vc2.val[1], va1.val[2],  vb3.val[0+2], 2);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+2][2]);
-    vmlalane(vc2.val[1], va1.val[3],  vb3.val[0+2], 3);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+2][3]);
+    vmlalane(vc2.val[1], vb1.val[0],  va3.val[2], 0);
+    vmlalane(vc2.val[1], vb1.val[1],  va3.val[2], 1);
+    vmlalane(vc2.val[1], vb1.val[2],  va3.val[2], 2);
+    vmlalane(vc2.val[1], vb1.val[3],  va3.val[2], 3);
 
-    vmlalane(vc2.val[1], va2.val[0],  vb3.val[0+3], 0);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+3][0]);
-    vmlalane(vc2.val[1], va2.val[1],  vb3.val[0+3], 1);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+3][1]);
-    vmlalane(vc2.val[1], va2.val[2],  vb3.val[0+3], 2);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+3][2]);
-    vmlalane(vc2.val[1], va2.val[3],  vb3.val[0+3], 3);
-    // print_vector(vc2);   printf("%d\n", vb3.val[0+3][3]);
+    vmlalane(vc2.val[1], vb2.val[0],  va3.val[3], 0);
+    vmlalane(vc2.val[1], vb2.val[1],  va3.val[3], 1);
+    vmlalane(vc2.val[1], vb2.val[2],  va3.val[3], 2);
+    vmlalane(vc2.val[1], vb2.val[3],  va3.val[3], 3);
 
-    vmlalane(vc2.val[2], va1.val[0],  vb4.val[0], 0);
-    // print_vector(vc2); printf("%d\n", vb4.val[0][0]);
-    vmlalane(vc2.val[2], va1.val[1],  vb4.val[0], 1);
-    // print_vector(vc2); printf("%d\n", vb4.val[0][1]);
-    vmlalane(vc2.val[2], va1.val[2],  vb4.val[0], 2);
-    // print_vector(vc2); printf("%d\n", vb4.val[0][2]);
-    vmlalane(vc2.val[2], va1.val[3],  vb4.val[0], 3);
-    // print_vector(vc2); printf("%d\n", vb4.val[0][3]);
+    vmlalane(vc2.val[2], vb1.val[0],  va4.val[0], 0);
+    vmlalane(vc2.val[2], vb1.val[1],  va4.val[0], 1);
+    vmlalane(vc2.val[2], vb1.val[2],  va4.val[0], 2);
+    vmlalane(vc2.val[2], vb1.val[3],  va4.val[0], 3);
 
-    vmlalane(vc2.val[2], va2.val[0],  vb4.val[0+1], 0);
-    // print_vector(vc2); printf("%d\n", vb4.val[0+1][0]);
-    vmlalane(vc2.val[2], va2.val[1],  vb4.val[0+1], 1);
-    // print_vector(vc2); printf("%d\n", vb4.val[0+1][1]);
-    vmlalane(vc2.val[2], va2.val[2],  vb4.val[0+1], 2);
-    // print_vector(vc2); printf("%d\n", vb4.val[0+1][2]);
-    vmlalane(vc2.val[2], va2.val[3],  vb4.val[0+1], 3);
-    // print_vector(vc2); printf("%d\n", vb4.val[0+1][3]);
+    vmlalane(vc2.val[2], vb2.val[0],  va4.val[1], 0);
+    vmlalane(vc2.val[2], vb2.val[1],  va4.val[1], 1);
+    vmlalane(vc2.val[2], vb2.val[2],  va4.val[1], 2);
+    vmlalane(vc2.val[2], vb2.val[3],  va4.val[1], 3);
 
-    vmlalane(vc2.val[3], va1.val[0],  vb4.val[0+2], 0);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+2][0]);
-    vmlalane(vc2.val[3], va1.val[1],  vb4.val[0+2], 1);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+2][1]);
-    vmlalane(vc2.val[3], va1.val[2],  vb4.val[0+2], 2);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+2][2]);
-    vmlalane(vc2.val[3], va1.val[3],  vb4.val[0+2], 3);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+2][3]);
+    vmlalane(vc2.val[3], vb1.val[0],  va4.val[2], 0);
+    vmlalane(vc2.val[3], vb1.val[1],  va4.val[2], 1);
+    vmlalane(vc2.val[3], vb1.val[2],  va4.val[2], 2);
+    vmlalane(vc2.val[3], vb1.val[3],  va4.val[2], 3);
 
-    vmlalane(vc2.val[3], va2.val[0],  vb4.val[0+3], 0);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+3][0]);
-    vmlalane(vc2.val[3], va2.val[1],  vb4.val[0+3], 1);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+3][1]);
-    vmlalane(vc2.val[3], va2.val[2],  vb4.val[0+3], 2);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+3][2]);
-    vmlalane(vc2.val[3], va2.val[3],  vb4.val[0+3], 3);
-    // print_vector(vc2);   printf("%d\n", vb4.val[0+3][3]);
+    vmlalane(vc2.val[3], vb2.val[0],  va4.val[3], 0);
+    vmlalane(vc2.val[3], vb2.val[1],  va4.val[3], 1);
+    vmlalane(vc2.val[3], vb2.val[2],  va4.val[3], 2);
+    vmlalane(vc2.val[3], vb2.val[3],  va4.val[3], 3);
 
-    // print_vector(vc1);
+
+#if DEBUG 
+    print_vector(vc1);
     print_vector(vc2);
+#endif 
+
 	vstore(&C[0 * N], vc1.val[0]);
 	vstore(&C[1 * N], vc1.val[1]);
 	vstore(&C[2 * N], vc1.val[2]);
@@ -327,23 +287,10 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 
 	for (int i = 0; i < BLOCKSIZE; i++)
 	{
-		// vload(vc, &C[i * N]);
-		// vdup(vc, 0);
-
-		// vdup(va.val[0], AT[i * 4 + 0]);
-		// vdup(va.val[1], AT[i * 4 + 1]);
-		// vdup(va.val[2], AT[i * 4 + 2]);
-		// vdup(va.val[3], AT[i * 4 + 3]);
-
-		// vmla(vc, va.val[0], vb.val[0]);
-		// vmla(vc, va.val[1], vb.val[1]);
-		// vmla(vc, va.val[2], vb.val[2]);
-		// vmla(vc, va.val[3], vb.val[3]);
-
-		vmlalane(vc.val[i], va.val[0], vb.val[i], 0);
-		vmlalane(vc.val[i], va.val[1], vb.val[i], 1);
-		vmlalane(vc.val[i], va.val[2], vb.val[i], 2);
-		vmlalane(vc.val[i], va.val[3], vb.val[i], 3);
+		vmlalane(vc.val[i], vb.val[0], va.val[i], 0);
+		vmlalane(vc.val[i], vb.val[1], va.val[i], 1);
+		vmlalane(vc.val[i], vb.val[2], va.val[i], 2);
+		vmlalane(vc.val[i], vb.val[3], va.val[i], 3);
 	}
 	vstore(&C[0 * N], vc.val[0]);
 	vstore(&C[1 * N], vc.val[1]);
