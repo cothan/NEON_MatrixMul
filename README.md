@@ -1,6 +1,6 @@
-= Matrix Multiplication Kernel in ARMv7 and ARMv8
+# Matrix Multiplication Kernel in ARMv7 and ARMv8
 
-== Kernel 
+## Kernel 
 
 Kernel size: 
 
@@ -9,13 +9,13 @@ Kernel size:
 
 I can't implememnt multiple of 16, simply run out of 32 registers for 16-bit types.
 
-== Performance Notes
+## Performance Notes
 
 - ARMv7 I have not optimized vector load. 
 
 - ARMv8 is optimized. 
 
-== Result 
+## Result 
 
 Here I only show result of ARMv8. Who cares to use ARMv7 nowadays. 
 
