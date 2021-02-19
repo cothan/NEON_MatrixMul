@@ -4,10 +4,15 @@
 
 Kernel size: 
 
-- Multiple of 4
-- Multiple of 8
+- 4x4
+- 8x8
+- 16x16
+- 32x32
+- 32x8
 
-I can't implememnt multiple of 16, simply run out of 32 registers for 16-bit types.
+Conclusion: Speed of matrix multiplication pretty much depend on matrix size, thus one can customize the kernel to best fit the matrix multilication.
+
+
 
 ## Performance Notes
 

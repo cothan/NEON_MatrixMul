@@ -9,8 +9,9 @@ typedef uint16_t u16;
 // gcc matmul.c -o matmul -O3  -g3 -mcpu=cortex-a9 -mfloat-abi=hard -mfpu=neon
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define TESTS 1000
 
-#define N 256
+#define N 32
 #define MAXRAND 8
 #ifndef DEBUG
 #define DEBUG 0
@@ -103,7 +104,7 @@ void print_vector_val(vecval a, int val, int bound)
     printf("--\n");
 }
 
-void classicMatMult(u16 A[], u16 B[], u16 C[])
+void classicMatMult(const u16 A[], const u16 B[], u16 C[])
 {
     for (int i = 0; i < N; i++)
     {
@@ -112,20 +113,24 @@ void classicMatMult(u16 A[], u16 B[], u16 C[])
             for (int j = 0; j < N; j++)
             {
                 C[i * N + j] += A[i * N + k] * B[k * N + j];
-#if DEBUG
-                printf("%2d * %2d, ", A[i * N + k], B[k * N + j]);
+
+                if (DEBUG)
+                    printf("%2d * %2d, ", A[i * N + k], B[k * N + j]);
             }
-            printf("\n");
+            if (DEBUG)
+                printf("\n");
         }
-        printf("\n");
-#endif
+        if (DEBUG)
+        {
+            printf("\n");
+            print_array(C);
+        }
     }
-}
-}
 }
 
 #if (N % 32) == 0
-void neonMatMul_base(u16 A[], u16 B[], u16 C[])
+static inline
+void neonMatMul_base(const u16 A[], const u16 B[], u16 C[])
 {
     // Multiplier block size : 32x32
     // Total registers: 30
@@ -194,7 +199,8 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 }
 
 #elif (N % 16) == 0
-void neonMatMul_base(u16 A[], u16 B[], u16 C[])
+static inline
+void neonMatMul_base(const u16 A[], const u16 B[], u16 C[])
 {
     // Multiplier block size 16x16
     // Total registers: 20
@@ -235,7 +241,8 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 }
 
 #elif (N % 8) == 0
-void neonMatMul_base(u16 A[], u16 B[], u16 C[])
+static inline
+void neonMatMul_base(const u16 A[], const u16 B[], u16 C[])
 {
     // Total registers:  24
     vecval va1, va2, vb1, vb2, vc1, vc2;
@@ -307,8 +314,8 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 }
 
 #elif (N % 4) == 0
-
-void neonMatMul_base(u16 A[], u16 B[], u16 C[])
+static inline
+void neonMatMul_base(const u16 A[], const u16 B[], u16 C[])
 {
     vecval va, vb, vc;
 
@@ -343,7 +350,65 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 #error "Matrix must be multiple of {4, 8}"
 #endif
 
-void neoMatMul(u16 A[], u16 B[], u16 C[])
+static 
+void neonMatMul_base_rectangle(const u16 A[], const u16 B[], u16 C[])
+{
+    // Multiplier block size 32x8
+    // Total registers: 33
+    vecval vb0, vb1, vb2, vb3, vc; //20
+    vec va;                        // 1
+
+    vload(vb0, &B[0 * N]);
+    vload(vb1, &B[1 * N]);
+    vload(vb2, &B[2 * N]);
+    vload(vb3, &B[3 * N]);
+
+    vload(vc, &C[0 * N]);
+    va = vld1q_u16(&A[8 * 0]);
+
+#pragma clang loop unroll(full)
+#pragma GCC unroll 4
+    for (int j = 0; j < 4; j++)
+    {
+        vmlalane(vc.val[j], vb0.val[j], va, 0);
+        vmlalane(vc.val[j], vb1.val[j], va, 1);
+        vmlalane(vc.val[j], vb2.val[j], va, 2);
+        vmlalane(vc.val[j], vb3.val[j], va, 3);
+    }
+
+    vload(vb0, &B[4 * N]);
+    vload(vb1, &B[5 * N]);
+    vload(vb2, &B[6 * N]);
+    vload(vb3, &B[7 * N]);
+#pragma clang loop unroll(full)
+#pragma GCC unroll 4
+    for (int j = 0; j < 4; j++)
+    {
+        vmlalane(vc.val[j], vb0.val[j], va, 4);
+        vmlalane(vc.val[j], vb1.val[j], va, 5);
+        vmlalane(vc.val[j], vb2.val[j], va, 6);
+        vmlalane(vc.val[j], vb3.val[j], va, 7);
+    }
+
+    vstore(&C[0 * N], vc);
+}
+
+void neonMatMul_rectangle(const u16 A[], const u16 B[], u16 C[])
+{
+    for (int i = 0; i < N; i++)
+    {
+        for (int k = 0; k < N; k += 8)
+        {
+            for (int j = 0; j < N; j += 32)
+            {
+                neonMatMul_base_rectangle(&A[i * N + k], &B[k * N + j], &C[N * i + j]);
+                // print_array(C);
+            }
+        }
+    }
+}
+
+void neonMatMul(const u16 A[], const u16 B[], u16 C[])
 {
     for (int i = 0; i < N; i += BLOCKSIZE)
     {
@@ -357,7 +422,7 @@ void neoMatMul(u16 A[], u16 B[], u16 C[])
     }
 }
 
-int checkCorrect(u16 A[], u16 B[])
+int checkCorrect(const u16 A[], const u16 B[])
 {
     for (int i = 0; i < N * N; i++)
     {
@@ -369,12 +434,10 @@ int checkCorrect(u16 A[], u16 B[])
     return 0;
 }
 
-#define TESTS 1000
-
 int main()
 {
     srand(time(0));
-    u16 A[N * N], B[N * N], C[N * N] = {0}, D[N * N] = {0};
+    u16 A[N * N], B[N * N], C[N * N] = {0}, D[N * N] = {0}, E[N * N] = {0};
     for (int i = 0; i < N * N; i++)
     {
         A[i] = rand(); //% MAXRAND;
@@ -402,9 +465,16 @@ int main()
     PAPI_hl_region_begin("neoMatMul");
     for (int i = 0; i < TESTS; i++)
     {
-        neoMatMul(A, B, D);
+        neonMatMul(A, B, D);
     }
     PAPI_hl_region_end("neoMatMul");
+
+    PAPI_hl_region_begin("neonMatMul_rectangle");
+    for (int i = 0; i < TESTS; i++)
+    {
+        neonMatMul_rectangle(A, B, E);
+    }
+    PAPI_hl_region_end("neonMatMul_rectangle");
 
 #if DEBUG
     printf("C======\n");
@@ -413,7 +483,7 @@ int main()
     print_array(D);
 #endif
 
-    if (checkCorrect(C, D))
+    if (checkCorrect(C, D) || checkCorrect(C, E))
     {
         printf("Error\n");
         return 1;
