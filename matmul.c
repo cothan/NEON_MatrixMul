@@ -8,7 +8,7 @@ typedef uint16_t u16;
 // Correct with N = 4, 12, 20
 // gcc matmul.c -o matmul -O3  -g3 -mcpu=cortex-a9 -mfloat-abi=hard -mfpu=neon
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #define N 256
 #define MAXRAND 8
@@ -128,36 +128,65 @@ void classicMatMult(u16 A[], u16 B[], u16 C[])
 void neonMatMul_base(u16 A[], u16 B[], u16 C[])
 {
     // Multiplier block size : 32x32
-    // Total registers: 37
-    vecval vb0, vb1, vb2, vb3, vb4, vb5, vb6, vb7, vc; //36
-    vec va;                                            // 1
-
+    // Total registers: 30
+    vecval vb0, vb1, vb2, vb3, vb4, vb5, vc; //28
+    uint16x8x2_t va;                         // 2
 
     for (int k = 0; k < BLOCKSIZE; k++)
     {
         vload(vc, &C[k * N]);
-#pragma GCC unroll 4
-        for (int i = 0; i < 4; i++)
+#pragma clang loop unroll(full)
+        for (int i = 0; i < 4; i += 2)
         {
-            va = vld1q_u16(&A[k * N + 8 * i]);
+            va = vld1q_u16_x2(&A[k * N + 8 * i]);
             vload(vb0, &B[(8 * i + 0) * N]);
             vload(vb1, &B[(8 * i + 1) * N]);
             vload(vb2, &B[(8 * i + 2) * N]);
             vload(vb3, &B[(8 * i + 3) * N]);
             vload(vb4, &B[(8 * i + 4) * N]);
             vload(vb5, &B[(8 * i + 5) * N]);
-            vload(vb6, &B[(8 * i + 6) * N]);
-            vload(vb7, &B[(8 * i + 7) * N]);
+#pragma GCC unroll 4
+#pragma clang loop unroll(full)
             for (int j = 0; j < 4; j++)
             {
-                vmlalane(vc.val[j], vb0.val[j], va, 0);
-                vmlalane(vc.val[j], vb1.val[j], va, 1);
-                vmlalane(vc.val[j], vb2.val[j], va, 2);
-                vmlalane(vc.val[j], vb3.val[j], va, 3);
-                vmlalane(vc.val[j], vb4.val[j], va, 4);
-                vmlalane(vc.val[j], vb5.val[j], va, 5);
-                vmlalane(vc.val[j], vb6.val[j], va, 6);
-                vmlalane(vc.val[j], vb7.val[j], va, 7);
+                vmlalane(vc.val[j], vb0.val[j], va.val[0], 0);
+                vmlalane(vc.val[j], vb1.val[j], va.val[0], 1);
+                vmlalane(vc.val[j], vb2.val[j], va.val[0], 2);
+                vmlalane(vc.val[j], vb3.val[j], va.val[0], 3);
+                vmlalane(vc.val[j], vb4.val[j], va.val[0], 4);
+                vmlalane(vc.val[j], vb5.val[j], va.val[0], 5);
+            }
+            vload(vb0, &B[(8 * i + 6) * N]);
+            vload(vb1, &B[(8 * i + 7) * N]);
+
+            vload(vb2, &B[(8 * (i + 1) + 0) * N]);
+            vload(vb3, &B[(8 * (i + 1) + 1) * N]);
+            vload(vb4, &B[(8 * (i + 1) + 2) * N]);
+            vload(vb5, &B[(8 * (i + 1) + 3) * N]);
+#pragma GCC unroll 4
+#pragma clang loop unroll(full)
+            for (int j = 0; j < 4; j++)
+            {
+                vmlalane(vc.val[j], vb0.val[j], va.val[0], 6);
+                vmlalane(vc.val[j], vb1.val[j], va.val[0], 7);
+
+                vmlalane(vc.val[j], vb2.val[j], va.val[1], 0);
+                vmlalane(vc.val[j], vb3.val[j], va.val[1], 1);
+                vmlalane(vc.val[j], vb4.val[j], va.val[1], 2);
+                vmlalane(vc.val[j], vb5.val[j], va.val[1], 3);
+            }
+            vload(vb0, &B[(8 * (i + 1) + 4) * N]);
+            vload(vb1, &B[(8 * (i + 1) + 5) * N]);
+            vload(vb2, &B[(8 * (i + 1) + 6) * N]);
+            vload(vb3, &B[(8 * (i + 1) + 7) * N]);
+#pragma GCC unroll 4
+#pragma clang loop unroll(full)
+            for (int j = 0; j < 4; j++)
+            {
+                vmlalane(vc.val[j], vb0.val[j], va.val[1], 4);
+                vmlalane(vc.val[j], vb1.val[j], va.val[1], 5);
+                vmlalane(vc.val[j], vb2.val[j], va.val[1], 6);
+                vmlalane(vc.val[j], vb3.val[j], va.val[1], 7);
             }
         }
         vstore(&C[k * N], vc);
@@ -171,11 +200,12 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
     // Total registers: 20
     vecval vb0, vb1, vb2, vb3, vb4, vb5, vb6, vb7, vc, va; //20
 
-#pragma GCC unroll 16
     for (int k = 0; k < BLOCKSIZE; k++)
     {
         vload(va, &A[k * N]);
         vload(vc, &C[k * N]);
+#pragma GCC unroll 2
+#pragma clang loop unroll(full)
         for (int i = 0; i < 2; i++)
         {
             vload(vb0, &B[(8 * i + 0) * N]);
@@ -186,6 +216,8 @@ void neonMatMul_base(u16 A[], u16 B[], u16 C[])
             vload(vb5, &B[(8 * i + 5) * N]);
             vload(vb6, &B[(8 * i + 6) * N]);
             vload(vb7, &B[(8 * i + 7) * N]);
+#pragma GCC unroll 2
+#pragma clang loop unroll(full)
             for (int j = 0; j < 2; j++)
             {
                 vmlalane(vc.val[j], vb0.val[j], va.val[i], 0);
